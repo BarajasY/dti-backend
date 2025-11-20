@@ -23,10 +23,12 @@ POSTGRES_DSN = os.getenv(
 app = FastAPI()
 
 # --- CORS totalmente abierto ---
+origins = ["https://dti-frontend.pages.dev"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # <--- cualquier dominio
-    allow_credentials=False,
+    allow_origins=origins,
+    allow_credentials=True,   # aquí sí puedes
     allow_methods=["*"],
     allow_headers=["*"],
 )
