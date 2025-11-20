@@ -396,6 +396,6 @@ async def shutdown_event():
         pool = None
 
 
-if __name__ == "__main__":
-    print("Iniciando servidor en http://127.0.0.1:8000", flush=True)
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+# if __name__ == "__main__":
+#     print("Iniciando servidor en http://127.0.0.1:8000", flush=True)
+#     uvicorn.run(app, host="127.0.0.1", port=8000)
