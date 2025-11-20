@@ -192,25 +192,40 @@ def run_analisis_estadistico() -> dict:
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """
-    Envía continuamente el estado actual de las PCs
-    leyendo desde PostgreSQL (pcmonitor) y, de paso,
-    inserta snapshots en historial_metricas + errores
-    en historial_errores.
+    WebSocket:
+    - Ejecuta fn_actualizar_monitoreo_pc() en PostgreSQL
+    - Lee pcmonitor
+    - Guarda historial
+    - Envía estado al cliente
     """
     await websocket.accept()
     print(f"Panel conectado: {websocket.client}")
 
     try:
         while True:
+            def ejecutar_actualizacion():
+                if pool is None:
+                    raise RuntimeError("Pool no inicializado")
+
+                with pool.connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT fn_actualizar_monitoreo_pc();")
+                    conn.commit()
+
+            await asyncio.to_thread(ejecutar_actualizacion)
+
             rows = await asyncio.to_thread(fetch_pcmonitor_from_pg)
 
             await asyncio.to_thread(guardar_historial_pcmonitor, rows)
 
-            estado_actual: dict[str, dict] = {}
+            from datetime import datetime, timezone
             ts = datetime.now(timezone.utc).timestamp()
+
+            estado_actual: dict[str, dict] = {}
 
             for row in rows:
                 pc_id = f"PC-{row.id}"
+
                 estado_actual[pc_id] = {
                     "estado": "Online" if row.activo else "Offline",
                     "usuario": "N/A",
@@ -219,12 +234,12 @@ async def websocket_endpoint(websocket: WebSocket):
                     "disco_uso": float(row.discoduro),
                     "procesos_count": int(row.procesos),
                     "error_mensaje": None,
-                    "timestamp": ts,
+                    "timestamp": ts
                 }
 
             await websocket.send_text(json.dumps(estado_actual))
 
-            await asyncio.sleep(5)
+            await asyncio.sleep(10)
 
     except WebSocketDisconnect:
         print(f"Panel desconectado: {websocket.client}")
