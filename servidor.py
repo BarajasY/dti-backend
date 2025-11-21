@@ -423,7 +423,7 @@ def fetch_pcmonitor_from_pg() -> list[PcMonitorRow]:
     return resultado
 
 
-@app.get("/api/pcmonitor", response_model=PcMonitorConErroresResponse)
+@app.get("/api/pcmonitor/", response_model=PcMonitorConErroresResponse)
 def get_pcmonitor():
     """
     Devuelve el estado actual de la tabla pcmonitor en PostgreSQL
