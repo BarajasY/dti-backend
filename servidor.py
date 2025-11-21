@@ -23,7 +23,7 @@ POSTGRES_DSN = os.getenv(
 app = FastAPI()
 
 # --- CORS totalmente abierto ---
-origins = ["https://dti-frontend.pages.dev"]
+origins = ["https://dti-frontend.pages.dev", "http://localhost:3000"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -35,6 +35,12 @@ app.add_middleware(
 
 
 # --- Clases ---
+class HistorialError(BaseModel):
+    id: int
+    pc_id: str
+    error_mensaje: str
+    timestamp: datetime
+
 class MetricasAgente(BaseModel):
     pc_id: str
     usuario: str
@@ -53,6 +59,9 @@ class PcMonitorRow(BaseModel):
     discoduro: int
     activo: bool
 
+class PcMonitorConErroresResponse(BaseModel):
+    pcs: List[PcMonitorRow]
+    errores: List[HistorialError]
 
 def run_analisis_estadistico() -> dict:
     """
@@ -318,6 +327,39 @@ def guardar_historial_pcmonitor(rows: list[PcMonitorRow]) -> None:
         conn.commit()
 
 
+def fetch_historial_errores_from_pg(limit: int = 100) -> List[HistorialError]:
+    """
+    Lee los últimos errores registrados en la tabla historial_errores.
+    """
+    if pool is None:
+        raise RuntimeError("El pool de PostgreSQL no está inicializado")
+
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    id,
+                    pc_id,
+                    error_mensaje,
+                    timestamp
+                FROM historial_errores
+                ORDER BY timestamp DESC
+                LIMIT %s;
+            """, (limit,))
+            rows = cur.fetchall()
+
+    errores: List[HistorialError] = []
+    for row in rows:
+        errores.append(
+            HistorialError(
+                id=row[0],
+                pc_id=row[1],
+                error_mensaje=row[2],
+                timestamp=row[3],
+            )
+        )
+    return errores
+
 @app.get("/api/analisis/", tags=["analitica"])
 async def obtener_analisis():
     """
@@ -381,13 +423,19 @@ def fetch_pcmonitor_from_pg() -> list[PcMonitorRow]:
     return resultado
 
 
-@app.get("/api/pcmonitor", response_model=List[PcMonitorRow])
+@app.get("/api/pcmonitor", response_model=PcMonitorConErroresResponse)
 def get_pcmonitor():
     """
-    Devuelve el estado actual de la tabla pcmonitor en PostgreSQL.
+    Devuelve el estado actual de la tabla pcmonitor en PostgreSQL
+    junto con los últimos errores registrados.
     """
     rows = fetch_pcmonitor_from_pg()
-    return rows
+    errores = fetch_historial_errores_from_pg(limit=100)
+
+    return {
+        "pcs": rows,
+        "errores": errores,
+    }
 
 
 @app.on_event("shutdown")
